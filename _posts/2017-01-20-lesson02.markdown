@@ -5,7 +5,7 @@ date:   2017-01-20 12:00:00 +0100
 tags: [docker, alpine]
 categories: alpine beginner
 ---
-## Let's play with Docker containers !
+Let's play with Docker containers !
 
 ## What you will do
 
@@ -14,33 +14,85 @@ You’ll then start to play and hopefully to have fun with containers.
 
 ## Check the version
 
-```.term
+```.term1
 docker version
 ```
 
-You should be running 1.13 for client and server, correct ?
+You should be running 1.13 for client and server.
 
 ## Launch containers
 
-## Launch a container based on alpine in interactive mode
-
-```.term
+Launch a container based on alpine in interactive mode
+```.term1
 docker container run -ti alpine
 ```
 
+What do you notice ? You should have an error message like the following one:
+```
+Unable to find image 'alpine:latest' locally
+latest: Pulling from library/alpine
+0a8490d0dfd3: Pull complete
+Digest: sha256:dfbd4a3a8ebca874ebd2474f044a0b33600d4523d03b0df76e5c5986cb
+02d7e8
+Status: Downloaded newer image for alpine:latest
+docker: Error response from daemon: No command specified.
+See 'docker run --help'.
+```
+
 Provide "sh" command when launching the container
-```.term
+```.term1
 docker container run -ti alpine sh
 ```
 
+You should have a shell running in a container based on the alpine linux distribution
+```.term1
+cat /etc/issue
+exit
+```
+
+
 Launch a container based on mongo image. What is happening ?
-Exit the container without killing PID 1 (C-P / C-Q)
+```.term1
+docker container run --name mongo mongo:3.2
+```
+
+Exit the container without killing PID 1 with (C-P / C-Q)
+
 Attach to the mongo container
-Inspect container
+```.term1
+docker container exec -ti mongo bash
+```
+
+## Inspect container
+
 Launch a container based on nginx in background mode
-Inspect the container
+```.term1
+docker container run --name www -d nginx
+```
+
+Inspect the nginx container
+```.term1
+docker container inspect www
+```
+
 Find the following parameters (Hostname, Adresse IP)
+```.term1
+docker container inspect --format '{{ .Config.Hostname }}'
+```
+```.term1
+docker container inspect --format "{{ .NetworkSettings.IPAddress }}"
+```
+
+## Explore the other command of the container's API
+
+List the available commands
+```.term1
+docker container --help
+```
+
+## Understand the container layer
+
+The container layer is the layer created when a container is ran. This is the layer in which modification done in the container are stored.
+This layer is deleted when the container is removed and thus cannot be used for presistent storage.
 
 
-## Next Steps
-For the next step in the tutorial, head over to [1.0 Running an alpine container](../alpine)`
