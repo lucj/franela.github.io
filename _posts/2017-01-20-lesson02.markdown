@@ -77,10 +77,10 @@ docker container inspect www
 
 Find the following parameters (Hostname, Adresse IP)
 ```.term1
-docker container inspect --format '{{ .Config.Hostname }}'
+docker container inspect --format "{{ "{{ .Config.Hostname " }}}}"
 ```
 ```.term1
-docker container inspect --format "{{ .NetworkSettings.IPAddress }}"
+docker container inspect --format "{{ "{{ .NetworkSettings.IPAddress " }}}}"
 ```
 
 ## Explore the other command of the container's API
@@ -95,4 +95,36 @@ docker container --help
 The container layer is the layer created when a container is ran. This is the layer in which modification done in the container are stored.
 This layer is deleted when the container is removed and thus cannot be used for presistent storage.
 
+Launch a container based on Ubuntu image
+```.term1
+docker container run -ti ubuntu
+```
 
+Check if figlet command it available (it should tell you the command is not found)
+```.term1
+figlet
+```
+
+Update the packages and install figlet
+```.term1
+apt-get update -y
+apt-get install figlet
+```
+
+Make sure figlet is correctly installed
+```.term1
+figlet Holla
+```
+You should get a nicely formated output
+```
+ _           _ _
+| |__   ___ | | | __ _
+| '_ \ / _ \| | |/ _` |
+| | | | (_) | | | (_| |
+|_| |_|\___/|_|_|\__,_|
+```
+
+You can now exit the container
+```.term1
+exit
+```
