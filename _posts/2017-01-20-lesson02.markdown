@@ -1,9 +1,8 @@
 ---
 layout: post
-title:  "Lesson02"
+title:  "Lesson02 - Containers"
 date:   2017-01-20 12:00:00 +0100
-tags: [docker, alpine]
-categories: alpine beginner
+tags: [techwhale, docker, labs]
 ---
 Let's play with Docker containers !
 
@@ -23,11 +22,13 @@ You should be running 1.13 for client and server.
 ## Launch containers
 
 Launch a container based on alpine in interactive mode
+
 ```.term1
 docker container run -ti alpine
 ```
 
 What do you notice ? You should have an error message like the following one:
+
 ```
 Unable to find image 'alpine:latest' locally
 latest: Pulling from library/alpine
@@ -40,18 +41,20 @@ See 'docker run --help'.
 ```
 
 Provide "sh" command when launching the container
+
 ```.term1
 docker container run -ti alpine sh
 ```
 
 You should have a shell running in a container based on the alpine linux distribution
+
 ```.term1
 cat /etc/issue
 exit
 ```
 
-
 Launch a container based on mongo image. What is happening ?
+
 ```.term1
 docker container run --name mongo mongo:3.2
 ```
@@ -59,6 +62,7 @@ docker container run --name mongo mongo:3.2
 Exit the container without killing PID 1 with (C-P / C-Q)
 
 Attach to the mongo container
+
 ```.term1
 docker container exec -ti mongo bash
 ```
@@ -66,19 +70,23 @@ docker container exec -ti mongo bash
 ## Inspect container
 
 Launch a container based on nginx in background mode
+
 ```.term1
 docker container run --name www -d nginx
 ```
 
 Inspect the nginx container
+
 ```.term1
 docker container inspect www
 ```
 
 Find the following parameters (Hostname, Adresse IP)
+
 ```.term1
 docker container inspect --format "{{ "{{ .Config.Hostname " }}}}"
 ```
+
 ```.term1
 docker container inspect --format "{{ "{{ .NetworkSettings.IPAddress " }}}}"
 ```
@@ -86,6 +94,7 @@ docker container inspect --format "{{ "{{ .NetworkSettings.IPAddress " }}}}"
 ## Explore the other command of the container's API
 
 List the available commands
+
 ```.term1
 docker container --help
 ```
@@ -96,26 +105,32 @@ The container layer is the layer created when a container is ran. This is the la
 This layer is deleted when the container is removed and thus cannot be used for presistent storage.
 
 Launch a container based on Ubuntu image
+
 ```.term1
 docker container run -ti ubuntu
 ```
 
 Check if figlet command it available (it should tell you the command is not found)
+
 ```.term1
 figlet
 ```
 
 Update the packages and install figlet
+
 ```.term1
 apt-get update -y
 apt-get install figlet
 ```
 
 Make sure figlet is correctly installed
+
 ```.term1
 figlet Holla
 ```
+
 You should get a nicely formated output
+
 ```
  _           _ _
 | |__   ___ | | | __ _
@@ -128,3 +143,99 @@ You can now exit the container
 ```.term1
 exit
 ```
+
+Launch a new container, in interactive mode, based on the Ubuntu image
+
+```.term1
+docker container run -ti ubuntu
+```
+
+Let's check if the figlet package we installed just before is still there.
+
+```.term1
+figlet
+```
+
+You should get an error message like the fllowing.
+
+```
+bash: figlet: command not found
+```
+
+Why ?
+
+Answer: this new ubuntu container is different from the previous one, the one in which figlet was installed. Both containers have their own container's layer.
+Remember, the container's layer is the read-write layer created when a container is run, it's the place where changes done within the container are saved.
+
+Let's exit from this container.
+
+```.term1
+exit
+```
+
+List all the running container.
+
+```.term1
+docker container ls
+```
+
+And then all the container existing on the host.
+
+```.term1
+docker container ls -a
+```
+
+From this list, get the id of the container in which we installed the figlet package and restart the container using the 'start' command.
+
+```
+docker container start CONTAINER_ID
+```
+
+Run an interactive shell in this container. We will use the 'exec' command to do so.
+
+```
+docker container exec -ti CONTAINER_ID
+```
+
+Verify figlet is present in this container.
+
+```.term1
+figet still there !
+```
+
+Exit the container?
+
+```.term1
+exit
+```
+
+## Cleanup
+
+We will now remove all the container from the machine. There should not be any container in the running state though.
+Let's check that.
+
+```.term1
+docker container ls -a
+```
+
+If we had the -q option to the previous command, we get only the ID of the container.
+
+```.term1
+docker container ls -aq
+```
+
+This is really handy when we need to remove several container at the same time as we will feed the 'rm' command with this list of ids.
+
+```.term1
+docker container rm $(docker container ls -aq)
+```
+
+There should not be any more container on the host.
+
+```.term1
+docker container ls -a
+```
+
+## What we seen in this lab
+
+We have started to play with containers and to understand the container layer, this little read-write layer that is added to each container that is ran. We also started to play with the container API and the commands used the most (run, exec, ls, rm, inspect).
