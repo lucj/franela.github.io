@@ -2,336 +2,73 @@
 layout: post
 title:  "Lesson04 - Registries"
 date:   2017-01-22
+author: "@lucjuggery"
 tags: [techwhale]
 ---
 
-# Let's have fun with Docker images
+# Using Docker Open Source Registry
 
-In this lab you’ll see how to create an image from a container, event if this is not used very often, it’s interesting to try it at least once.
-Then we’ll focus on the image creation using a Dockerfile.  You’ll then see how to get image details through the inspection and then explore the filesystem to have a better understanding of what happens behind the hood. We will also use the image API.
+In this lab, we will put into practice what we saw regarding the open source version of the Docker Registry. This one is available as an official image on the Docker Hub.
 
-## Image creation from a container
+## Launch a container based on the official Docker Registry image
 
-Let's start by running an ubuntu container running in interactive mode.
-
-```.term1
-docker run -ti ubuntu bash
-```
-
-As we've done in the previous lab, we will install the figlet package in this container.
+We will use the official **registry** image available on the Docker Hub. We need to use the version 2 as the 1 is deprecated.
 
 ```.term1
-apt-get update -y
-apt-get install figlet
+docker container run -d -p 5000:5000 registry:2
 ```
 
-We then exit from this container
+Note: we use the **-d** flag so it runs in backgroud, and the **-p** flag to map container's port 5000 to host's port 5000.
+
+## Make sure registry is empty (no image)
+
+Using the registry HTTP Rest API, we first make sure the catalog is empty, in other words that no image are currently present in the registry.
 
 ```.term1
-exit
+curl localhost:5000/v2/_catalog
 ```
 
-Get the ID of this container using the ls command (do not forget the -a option as the non running container are not returned by the ls command otherwise).
+## Pull an image
 
-```.term1
-docker container ls -a
-```
-
-Run the following command using the ID retreived.
-
-```
-docker container commit CONTAINER_ID
-```
-
-The container has been commited, which mean an image has been created out of it. We can see that by listing the image available.
-
-```.term1
-docker image ls
-```
-
-From the previous command, get the ID of the newly created image tag it so it's named **ourfiglet**.
-
-```
-docker image tag IMAGE_ID ourfiglet
-```
-
-Note run a container based on the newly created image named **ourfiglet**, and specify the command to be ran such as it uses the figlet package.
-
-```.term1
-docker container run ourfiglet figlet hello
-```
-
-As figlet is present in our **ourfiglet** image, the command ran returns the following output.
-
-```
- _          _ _
-| |__   ___| | | ___
-| '_ \ / _ \ | |/ _ \
-| | | |  __/ | | (_) |
-|_| |_|\___|_|_|\___/
-
-```
-
-This example shows that we can create a container, add all the libraries, binaries, ... we want and then commit this one in order to create an image. We can then use that image as we would do for any other images.
-This approach is not the recommended one as it is not very portage. In the following we will see how image are usually created, that is to say using a Dockerfile, which is a text file that contains all the instructions, kind of recipe, to build an image.
-
-
-## Image creation using a Dockerfile
-
-We will use a simple example in this section and build an hello world application in Node.js.
-
-We start by creating a file in which we retrieve the hostname and display it.
-Copy the following content into index.js file.
-
-```
-var os = require("os");
-var hostname = os.hostname();
-console.log("hello from " + hostname);
-```
-
-We will dockerrize this application and start by creating a Dockerfile for this purpose. We will use **alpine** as the base image, add nodejs runtime and then copy our source code.
-We will also specify the default command to be ran upon container creation.
-Create a file named Dockerfile and copy the following content into it.
-
-```
-FROM alpine
-RUN apk update && apk add nodejs
-COPY . /app
-WORKDIR /app
-CMD ["node","index.js"]
-```
-
-Let's build our first image out of this Dockerfile, we will name it hello:v1.0
-
-```.term1
-docker image build -t hello:v0.1 .
-```
-
-We then create a container to check it is running file.
-
-```.term1
-docker container run hello:v0.1
-```
-
-You should then have an output similar to the following one (the ID will be different though).
-
-```
-hello from 92d79b6de29f
-```
-
-There are always several ways to write a Dockerfile, we can start from a Linux distribution and then install a runtime (as we did above) or used images where this has already been done for us.
-
-To illustrate that, we will now create a new Dockerfile but we will use the **mhart/alpine-node:6.9.4** image. This is not an official image but it's a very well known and used one.
-
-Let's create a new Dockerfile named Dockerfile-v2 and make sure it has the following content.
-
-```
-FROM mhart/alpine-node:6.9.4
-COPY . /app
-WORKDIR /app
-CMD ["node","index.js"]
-```
-
-Basically, it is not that different from the previous one, it just uses a base image that embeds alpine and a Node.js runtime so we do not have to instal it ourself. In this example, installing Node.js is not a big deal, but it is really helpful to use image where a runtime (or else) is already packages when using more complex environments.
-
-We will now create a new image using this Dockerfile.
-
-```.term1
-docker image build -f Dockerfile-v2 -t hello:v0.2 .
-```
-
-Note: as we do not use the default name for our Dockerfile, we use the -f option to points towards the one we need to use.
-
-And then run it.
-
-```.term1
-docker container run hello:v0.2
-```
-
-One again, the output will look like the following.
-
-```
-hello from 4094ff6bffbd
-```
-
-## ENTRYPOINT vs COMMAND
-
-In the 2 previous Dockerfile, we used CMD to define the command to be ran when a container is launched. As we have seen, there are several ways to define the command, using ENTRYPOINT and/or CMD.
-Let's create another Dockerfile that we will name Dockerfile-v3 with the following content.
-
-```
-FROM alpine
-ENTRYPOINT ["ping"]
-CMD ["localhost"]
-```
-
-Here, we defined the **ping** command as the ENTRYPOINT and the **localhost** as the CMD, the command that will be ran by default is the concatenation of ENTRYPOINT and CMD: ping localhost.
-This command can be seen as a wrapper around the **ping** utility to which we can change the address provided.
-
-Let's create an image based on this file.
-
-```.term1
-docker image build -f Dockerfile-v3 -t ping:v0.1 .
-```
-
-We can run this image without specifying any command:
-
-```.term1
-docker container run ping:v0.1
-```
-
-That should give a result like the following one.
-
-```
-PING localhost (127.0.0.1): 56 data bytes
-64 bytes from 127.0.0.1: seq=0 ttl=64 time=0.046 ms
-64 bytes from 127.0.0.1: seq=1 ttl=64 time=0.046 ms
-64 bytes from 127.0.0.1: seq=2 ttl=64 time=0.046 ms
-64 bytes from 127.0.0.1: seq=3 ttl=64 time=0.046 ms
-64 bytes from 127.0.0.1: seq=4 ttl=64 time=0.047 ms
-```
-
-You can also override the default CMD indicating some other ip after the name of the image.
-
-```.term1
-docker container run ping:v0.1 8.8.8.8
-```
-
-That would return the following.
-
-```
-PING 8.8.8.8 (8.8.8.8): 56 data bytes
-64 bytes from 8.8.8.8: seq=0 ttl=38 time=9.235 ms
-64 bytes from 8.8.8.8: seq=1 ttl=38 time=8.590 ms
-64 bytes from 8.8.8.8: seq=2 ttl=38 time=8.585 ms
-```
-
-## Image inspection
-
-As we have already seen with container, and as we will see with other Docker's components (volume, network, ...), the **inspect** command is available for the image API and it returns all the information of the image provided.
-
-The alpine image should already be present locally, if it's not, run the following command to pull it.
-
-```.term1
-docker image pull alpine
-```
-
-Let's inspect this image.
-
-```.term1
-docker image inspect alpine
-```
-
-There is a lot of information in there:
-- the layers the image is composed of
-- which dirver is used to store those layers
-- the architecture / os it has been created for
-- metadata of the image
-- ...
-
-We will not go into all the details now but it's interesing to see an example of the Go template notation that enables to extract the part of information we need in just a simple command.
-
-Let's get the list of layers (only one for alpine)
-
-```.term1
-docker inspect --format '{{ json .RootFS.Layers }}' alpine | python -m json.tool
-```
-
-```
-[
-    "sha256:60ab55d3379d47c1ba6b6225d59d10e1f52096ee9d5c816e42c635ccc57a5a2b"
-]
-```
-
-Let's try another example to query only the Architecture information
-
-```.term1
-docker inspect --format "{{ "{{ .Architecture "}}}}" alpine
-```
-
-This should return **amd64**.
-
-## Filesystem exploration
-
-First stop and remove all container from your host (you might not be able to remove images if container are using some of the layers).
-
-```.term1
-docker container stop $(docker container ls -aq)
-docker container rm $(docker container ls -aq)
-```
-
-Note: containers can also be removed in a non graceful way:
-
-```
-docker container rm -f $(docker container ls -aq)
-```
-
-We also remove all the images
-
-```.term1
-docker image rm $(docker image ls -q)
-```
-
-We now have a look inside the **/graph/overlay2** folder where the image and container layers are stored.
-
-```.term1
-ls /graph/overlay2
-```
-
-As we do not have any images yet, there should not be anything in this folder.
-
-Let's pull an nginx image
+Pull the image of your choice (Linux distrubution, database, web server, ...). In this example we will go for nginx.
 
 ```.term1
 docker image pull nginx
 ```
 
-You should get something like the following where we can see that 3 layers are pulled.:
+## Tag this image with the format expected by the registry
+
+As we use our own regsitry, all the images that are stored inside it needs to be tagged in the following way.
 
 ```
-Using default tag: latest
-latest: Pulling from library/nginx
-5040bd298390: Pull complete
-d7a91cdb22f0: Pull complete
-9cac4850e5df: Pull complete
-Digest: sha256:33ff28a2763feccc1e1071a97960b7fef714d6e17e2d0ff573b74825d0049303
-Status: Downloaded newer image for nginx:latest
+localhost:5000/NAME:VERSION
 ```
 
-If we have a look to the changes that occurs in the /graph/overlay2 folder
+We will then tag the nginx image we have pulled (do the same if you have pulled another image than the nginx one), and use **w3** as the image name and **v1.0** as the version.
 
 ```.term1
-ls /graph/overlay2
+docker image tag nginx localhost:5000/w3:v1.0
 ```
 
-we can see the following:
+## Push tagged image
 
-```
-261fed39e3aca63326758681c96cad5bfe7eeeabafda23408bee0f5ae365d3fd
-28f7998921ca5e4b28231b59b619394ba73571b5127a9c28cc9bacb3db706d2a
-backingFsBlockDev
-c1ae1be1c1c62dbaacf26bb9a5cde02e30d5364e06a437d0626f31c55af82a58
-l
-```
-
-There folder with names that lloks like IDs are created, those are the layers which put together build the image filesystem.
-
-Let's run a container based on nginx now.
+Now that the image is tagged with the correct format, it can be pushed to the registry.
 
 ```.term1
-docker container run -d nginx
+docker image push localhost:5000/w3:v1.0
 ```
 
-We can now see 2 additional folders (ID, ID-init), those ones correspond to the read-write layer of the running container.
- 
-```
-11995e6da1dc5acab33aceacea3656d3795a4fb136c3a65b37d40b97747b5f84
-11995e6da1dc5acab33aceacea3656d3795a4fb136c3a65b37d40b97747b5f84-init
-261fed39e3aca63326758681c96cad5bfe7eeeabafda23408bee0f5ae365d3fd
-28f7998921ca5e4b28231b59b619394ba73571b5127a9c28cc9bacb3db706d2a
-backingFsBlockDev
-c1ae1be1c1c62dbaacf26bb9a5cde02e30d5364e06a437d0626f31c55af82a58
-l
+## Make sure the image is listed in the registry
+
+We will now check in the regsitry that our new image is in the catalog.
+
+```.term1
+curl localhost:5000/v2/_catalog
 ```
 
-Feel free to go into those folder and explore the filesystems there.
+This is a basic example that illustrates how the open source registry is working. Several key points we need to note:
+
+1. By default a Docker Engine cannot use a registry that is not secured (as this is the case for the open source one). Two options then: 
+   * to change the configuration settings of the Docker Engine and restart it using the --insecure-registry flag
+   * to use the localhost exception meaning that if we can access the registry on localhost this usage is possible even if the Docker Engine does not use the --insecure-registry flag. This is the option we used in this example.
+2. When not using Docker Hub as the image registry, we need to tag the image with the hostname:port prefix.

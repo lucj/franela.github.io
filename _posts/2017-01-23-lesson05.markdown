@@ -1,337 +1,358 @@
 ---
 layout: post
 title:  "Lesson05 - Volumes"
-date:   2017-01-23
+author: "@lucjuggery"
 tags: [techwhale]
 ---
 
-# Let's have fun with Docker images
+# Understanding what is this volume thing
 
-In this lab you’ll see how to create an image from a container, event if this is not used very often, it’s interesting to try it at least once.
-Then we’ll focus on the image creation using a Dockerfile.  You’ll then see how to get image details through the inspection and then explore the filesystem to have a better understanding of what happens behind the hood. We will also use the image API.
+In this lab, we will illustrate the concept of volume. We will see how to use volume
+- in a Dockerfile
+- at runtime with the -v option
+- using the volume API
 
-## Image creation from a container
+We will also see what is bind-mounting on a simple example.
 
-Let's start by running an ubuntu container running in interactive mode.
+## Data persistency without a volume ?
+
+We will first illustrate how data are **not** persisted outside of a container by default.
+
+Let's run an interactive shell within an alpine container named c1.
 
 ```.term1
-docker run -ti ubuntu bash
+docker container run --name c1 -ti alpine sh
 ```
 
-As we've done in the previous lab, we will install the figlet package in this container.
+We will create the /data folder and a dummy hello.txt file in it.
 
 ```.term1
-apt-get update -y
-apt-get install figlet
+mkdir /data && cd /data && touch hello.txt
 ```
 
-We then exit from this container
+We will then check how the read-write layer (container layer) is accessible from the host.
+
+Let exit the container first.
 
 ```.term1
 exit
 ```
 
-Get the ID of this container using the ls command (do not forget the -a option as the non running container are not returned by the ls command otherwise).
+Let's inspect our container in order to get the location of the container's layer.
+We can use the use inspect command and then scroll into the output until the **GraphDriver** key, like the following.
 
 ```.term1
-docker container ls -a
+docker container inspect c1
 ```
 
-Run the following command using the ID retreived.
-
-```
-docker container commit CONTAINER_ID
-```
-
-The container has been commited, which mean an image has been created out of it. We can see that by listing the image available.
+Or we can directly use the Go template notation and get the content of the **GraphDriver** keys right away.
 
 ```.term1
-docker image ls
+docker container inspect -f "{{ "{{ json .GraphDriver "}}}}" c1 | python -m json.tool
 ```
 
-From the previous command, get the ID of the newly created image tag it so it's named **ourfiglet**.
+You should then get an output like the following (the ID will not be the same though)
 
 ```
-docker image tag IMAGE_ID ourfiglet
+{
+    "Data": {
+        "LowerDir": "/graph/overlay2/55922a6b646ba6681c5eca253a19e90270e3872329a239a82877b2f8c505c9a2-init/diff:/graph/overlay2/30474f5fc34277d1d9e5ed5b48e2fb979eee9805a61a0b2c4bf33b766ba65a16/diff",
+        "MergedDir": "/graph/overlay2/55922a6b646ba6681c5eca253a19e90270e3872329a239a82877b2f8c505c9a2/merged",
+        "UpperDir": "/graph/overlay2/55922a6b646ba6681c5eca253a19e90270e3872329a239a82877b2f8c505c9a2/diff",
+        "WorkDir": "/graph/overlay2/55922a6b646ba6681c5eca253a19e90270e3872329a239a82877b2f8c505c9a2/work"
+    },
+    "Name": "overlay2"
+}
 ```
 
-Note run a container based on the newly created image named **ourfiglet**, and specify the command to be ran such as it uses the figlet package.
+From our host, if we inspect the folder which path is specified in **UpperDir**, we can see our /data and the hello.txt file we created are there. 
+
+What happen if we remove our c1 container now ? Let's try.
 
 ```.term1
-docker container run ourfiglet figlet hello
+docker container rm c1
 ```
 
-As figlet is present in our **ourfiglet** image, the command ran returns the following output.
+It seems the folder defined in the **UpperDir** above does not exist anymore. Do you confirm that ?
 
-```
- _          _ _
-| |__   ___| | | ___
-| '_ \ / _ \ | |/ _ \
-| | | |  __/ | | (_) |
-|_| |_|\___|_|_|\___/
+This shows that data created in a container is not persisted. It's removed with the container's layer when the container is deleted.
 
-```
+## Defining a volume in a Dockerfile
 
-This example shows that we can create a container, add all the libraries, binaries, ... we want and then commit this one in order to create an image. We can then use that image as we would do for any other images.
-This approach is not the recommended one as it is not very portage. In the following we will see how image are usually created, that is to say using a Dockerfile, which is a text file that contains all the instructions, kind of recipe, to build an image.
+We will now see how volumes come into the picture to handle the data persistency.
 
+We will start by creating a Dockerfile based on alpine and define the /data as a volume.
+This means that anything written by a container in /data will be persisted outside of the Union filesystem.
 
-## Image creation using a Dockerfile
-
-We will use a simple example in this section and build an hello world application in Node.js.
-
-We start by creating a file in which we retrieve the hostname and display it.
-Copy the following content into index.js file.
-
-```
-var os = require("os");
-var hostname = os.hostname();
-console.log("hello from " + hostname);
-```
-
-We will dockerrize this application and start by creating a Dockerfile for this purpose. We will use **alpine** as the base image, add nodejs runtime and then copy our source code.
-We will also specify the default command to be ran upon container creation.
-Create a file named Dockerfile and copy the following content into it.
+Create a Dockerfile with the following content
 
 ```
 FROM alpine
-RUN apk update && apk add nodejs
-COPY . /app
-WORKDIR /app
-CMD ["node","index.js"]
+VOLUME ["/data"]
+ENTRYPOINT ["/bin/sh"]
 ```
 
-Let's build our first image out of this Dockerfile, we will name it hello:v1.0
+Note: we specify **/bin/sh** as the ENTRYPOINT so that if no command is provided in interactive mode we will end up in a shell inside our container.
+
+Let's build an image from this Dockerfile.
 
 ```.term1
-docker image build -t hello:v0.1 .
+docker image build -t img1 .
 ```
 
-We then create a container to check it is running file.
+We will then create a container in interactive mode (using -ti flags) from this image and name it c2.
 
 ```.term1
-docker container run hello:v0.1
+docker container run --name c2 -ti img
 ```
 
-You should then have an output similar to the following one (the ID will be different though).
-
-```
-hello from 92d79b6de29f
-```
-
-There are always several ways to write a Dockerfile, we can start from a Linux distribution and then install a runtime (as we did above) or used images where this has already been done for us.
-
-To illustrate that, we will now create a new Dockerfile but we will use the **mhart/alpine-node:6.9.4** image. This is not an official image but it's a very well known and used one.
-
-Let's create a new Dockerfile named Dockerfile-v2 and make sure it has the following content.
-
-```
-FROM mhart/alpine-node:6.9.4
-COPY . /app
-WORKDIR /app
-CMD ["node","index.js"]
-```
-
-Basically, it is not that different from the previous one, it just uses a base image that embeds alpine and a Node.js runtime so we do not have to instal it ourself. In this example, installing Node.js is not a big deal, but it is really helpful to use image where a runtime (or else) is already packages when using more complex environments.
-
-We will now create a new image using this Dockerfile.
+We should then end up in a shell within the container. From there, we will go into /data and create a hello.txt file.
 
 ```.term1
-docker image build -f Dockerfile-v2 -t hello:v0.2 .
+cd /data
+touch hello.txt
+ls
 ```
 
-Note: as we do not use the default name for our Dockerfile, we use the -f option to points towards the one we need to use.
-
-And then run it.
+Let's exit the container making sure it remains running: use the Control-P / Control-Q combinaison for this.
+Use the following command to make sure it's still running.
 
 ```.term1
-docker container run hello:v0.2
+docker container ls
 ```
 
-One again, the output will look like the following.
+Note: the container, named c2, should be listed there.
 
-```
-hello from 4094ff6bffbd
-```
-
-## ENTRYPOINT vs COMMAND
-
-In the 2 previous Dockerfile, we used CMD to define the command to be ran when a container is launched. As we have seen, there are several ways to define the command, using ENTRYPOINT and/or CMD.
-Let's create another Dockerfile that we will name Dockerfile-v3 with the following content.
-
-```
-FROM alpine
-ENTRYPOINT ["ping"]
-CMD ["localhost"]
-```
-
-Here, we defined the **ping** command as the ENTRYPOINT and the **localhost** as the CMD, the command that will be ran by default is the concatenation of ENTRYPOINT and CMD: ping localhost.
-This command can be seen as a wrapper around the **ping** utility to which we can change the address provided.
-
-Let's create an image based on this file.
+We will now inspect this container in order to get the location of the volume (defined on /data) on the host.
+We can use the inspect command and then scroll into the output until we find the **Mounts** key...
 
 ```.term1
-docker image build -f Dockerfile-v3 -t ping:v0.1 .
+docker container inspect c2
 ```
 
-We can run this image without specifying any command:
+Or we can directly use the Go template notation and get the content of the **Mounts** keys right away.
 
 ```.term1
-docker container run ping:v0.1
+docker container inspect -f "{{ "{{ json .Mounts "}}}}"  c2 | python -m json.tool
 ```
 
-That should give a result like the following one.
-
-```
-PING localhost (127.0.0.1): 56 data bytes
-64 bytes from 127.0.0.1: seq=0 ttl=64 time=0.046 ms
-64 bytes from 127.0.0.1: seq=1 ttl=64 time=0.046 ms
-64 bytes from 127.0.0.1: seq=2 ttl=64 time=0.046 ms
-64 bytes from 127.0.0.1: seq=3 ttl=64 time=0.046 ms
-64 bytes from 127.0.0.1: seq=4 ttl=64 time=0.047 ms
-```
-
-You can also override the default CMD indicating some other ip after the name of the image.
-
-```.term1
-docker container run ping:v0.1 8.8.8.8
-```
-
-That would return the following.
-
-```
-PING 8.8.8.8 (8.8.8.8): 56 data bytes
-64 bytes from 8.8.8.8: seq=0 ttl=38 time=9.235 ms
-64 bytes from 8.8.8.8: seq=1 ttl=38 time=8.590 ms
-64 bytes from 8.8.8.8: seq=2 ttl=38 time=8.585 ms
-```
-
-## Image inspection
-
-As we have already seen with container, and as we will see with other Docker's components (volume, network, ...), the **inspect** command is available for the image API and it returns all the information of the image provided.
-
-The alpine image should already be present locally, if it's not, run the following command to pull it.
-
-```.term1
-docker image pull alpine
-```
-
-Let's inspect this image.
-
-```.term1
-docker image inspect alpine
-```
-
-There is a lot of information in there:
-- the layers the image is composed of
-- which dirver is used to store those layers
-- the architecture / os it has been created for
-- metadata of the image
-- ...
-
-We will not go into all the details now but it's interesing to see an example of the Go template notation that enables to extract the part of information we need in just a simple command.
-
-Let's get the list of layers (only one for alpine)
-
-```.term1
-docker inspect --format '{{ json .RootFS.Layers }}' alpine | python -m json.tool
-```
+You should then get an output like the following (the ID will not be the same though)
 
 ```
 [
-    "sha256:60ab55d3379d47c1ba6b6225d59d10e1f52096ee9d5c816e42c635ccc57a5a2b"
+    {
+        "Destination": "/data",
+        "Driver": "local",
+        "Mode": "",
+        "Name": "2f5b7c6b77494934293fc7a09198dd3c20406f05272121728632a4aab545401c",
+        "Propagation": "",
+        "RW": true,
+        "Source": "/graph/volumes/2f5b7c6b77494934293fc7a09198dd3c20406f05272121728632a4aab545401c/_data",
+        "Type": "volume"
+    }
 ]
 ```
 
-Let's try another example to query only the Architecture information
+This output shows that the volume defined in /data is stored in **/graph/volumes/2f5...01c/_data** on the host (removing part of the ID for a better readibility).
+
+Copy your own path (the one under the **Source** key) and make sure the **hello.txt** file we created (from within the container) is there.
+
+We now remove the c2 container.
 
 ```.term1
-docker inspect --format "{{ "{{ .Architecture "}}}}" alpine
+docker container stop c2 && docker container rm c2
 ```
 
-This should return **amd64**.
+Check that the folder defined under the **Source** key is still there and contains **hello.txt** file.
 
-## Filesystem exploration
+From all of that, we can see that a volume bypass the union filesystem and is not dependent of a container's lifecycle.
 
-First stop and remove all container from your host (you might not be able to remove images if container are using some of the layers).
+## Defining a volume at runtime
+
+We have seen volume defined in a Dockerfile, we will see they can also be defined at runtime using the **-v** flag of the **docker container run** command.
+
+Let's create a container from the alpine image, we'll use the -d option so it runs in background and also define a volume on /data as we've done previously.
+In order the PID 1 process remains active, we use the following command that pings Google DNS and log the output in a file within the /data folder.
+
+```
+ping 8.8.8.8 > /data/ping.txt
+```
+
+The container is ran that way:
 
 ```.term1
-docker container stop $(docker container ls -aq)
-docker container rm $(docker container ls -aq)
+docker container run --name c3 -d -v /data alpine sh -c 'ping 8.8.8.8 > /data/ping.txt'
 ```
 
-Note: containers can also be removed in a non graceful way:
-
-```
-docker container rm -f $(docker container ls -aq)
-```
-
-We also remove all the images
+Let's inspect the container and get the **Mounts** key using the Go template notation.
 
 ```.term1
-docker image rm $(docker image ls -q)
+docker inspect -f "{{ "{{ json .Mounts "}}}}" c3 | python -m json.tool
 ```
 
-We now have a look inside the **/graph/overlay2** folder where the image and container layers are stored.
+We have pretty much the same output as we had when we defined the volume in the Dockerfile.
+
+```
+[
+  {
+    "Type": "volume",
+    "Name": "af621cde2717307e5bf91be850c5a00474d58b8cdc8d6e37f2e373631c2f1331",
+    "Source": "/graph/volumes/af621cde2717307e5bf91be850c5a00474d58b8cdc8d6e37f2e373631c2f1331/_data",
+    "Destination": "/data",
+    "Driver": "local",
+    "Mode": "",
+    "RW": true,
+    "Propagation": ""
+  }
+]
+```
+
+If we use the folder defined in the **Source** key, and check the content of the ping.txt within the /data folder, we get something similar to the following.
+
+```
+tail -f /graph/volumes/OUR_ID/_data /ping.txt
+64 bytes from 8.8.8.8: seq=34 ttl=37 time=0.462 ms
+64 bytes from 8.8.8.8: seq=35 ttl=37 time=0.436 ms
+64 bytes from 8.8.8.8: seq=36 ttl=37 time=0.512 ms
+64 bytes from 8.8.8.8: seq=37 ttl=37 time=0.487 ms
+64 bytes from 8.8.8.8: seq=38 ttl=37 time=0.409 ms
+64 bytes from 8.8.8.8: seq=39 ttl=37 time=0.438 ms
+64 bytes from 8.8.8.8: seq=40 ttl=37 time=0.477 ms
+...
+```
+
+The ping.txt file is updated regularly by the command running in the **c3** container.
+
+Stopping and removing the container will obviously stop the ping command but the /data/ping.txt file will still be there. Give it a try :)
+
+## Usage of the volume API
+
+The volume API introduced in Docker 1.9 enables to perform operations on volume very easily.
+
+First have a look of the commands available in the volume API.
 
 ```.term1
-ls /graph/overlay2
+docker volume --help
 ```
 
-As we do not have any images yet, there should not be anything in this folder.
-
-Let's pull an nginx image
+We will start with the create command, and create a volume named **html**.
 
 ```.term1
-docker image pull nginx
+docker volume create --name html
 ```
 
-You should get something like the following where we can see that 3 layers are pulled.:
-
-```
-Using default tag: latest
-latest: Pulling from library/nginx
-5040bd298390: Pull complete
-d7a91cdb22f0: Pull complete
-9cac4850e5df: Pull complete
-Digest: sha256:33ff28a2763feccc1e1071a97960b7fef714d6e17e2d0ff573b74825d0049303
-Status: Downloaded newer image for nginx:latest
-```
-
-If we have a look to the changes that occurs in the /graph/overlay2 folder
+If we list the existing volume, our **html** volume should be the only one.
 
 ```.term1
-ls /graph/overlay2
+docker volume ls
 ```
 
-we can see the following:
+The output should be something like
 
 ```
-261fed39e3aca63326758681c96cad5bfe7eeeabafda23408bee0f5ae365d3fd
-28f7998921ca5e4b28231b59b619394ba73571b5127a9c28cc9bacb3db706d2a
-backingFsBlockDev
-c1ae1be1c1c62dbaacf26bb9a5cde02e30d5364e06a437d0626f31c55af82a58
-l
+DRIVER              VOLUME NAME
+local               html
 ```
 
-There folder with names that lloks like IDs are created, those are the layers which put together build the image filesystem.
-
-Let's run a container based on nginx now.
+In the volume API, like for almost all the other Docker's API, there is an **inspect** command. Let's use it against the **html** volume.
 
 ```.term1
-docker container run -d nginx
+docker volume inspect html
 ```
 
-We can now see 2 additional folders (ID, ID-init), those ones correspond to the read-write layer of the running container.
- 
+The output should be the following one.
+
 ```
-11995e6da1dc5acab33aceacea3656d3795a4fb136c3a65b37d40b97747b5f84
-11995e6da1dc5acab33aceacea3656d3795a4fb136c3a65b37d40b97747b5f84-init
-261fed39e3aca63326758681c96cad5bfe7eeeabafda23408bee0f5ae365d3fd
-28f7998921ca5e4b28231b59b619394ba73571b5127a9c28cc9bacb3db706d2a
-backingFsBlockDev
-c1ae1be1c1c62dbaacf26bb9a5cde02e30d5364e06a437d0626f31c55af82a58
-l
+[
+    {
+        "Driver": "local",
+        "Labels": {},
+        "Mountpoint": "/graph/volumes/html/_data",
+        "Name": "html",
+        "Options": {},
+        "Scope": "local"
+    }
+]
 ```
 
-Feel free to go into those folder and explore the filesystems there.
+The **Mountpoint** defined here is the path on the Docker host where the volume can be accessed. We can note that this path uses the name of the volume instead of the autogenerated ID we saw in the example above. 
+
+We can now use this volume and mount it on a specific path of a container. We will use a Nginx image and mount the **html** volume onto **/usr/share/nginx/html** folder within the container.
+
+Note: /usr/share/nginx/html is the default folder served by nginx. It contains 2 files: index.html and 50x.html
+
+```.term1
+docker run --name www -d -p 8080:80 -v html:/usr/share/nginx/html nginx
+```
+
+Note: we use the -p option to map the nginx default port (80) to a port on the host (8080). We will come back to this in the lesson dedicated to the networking.
+
+From the host, let's have a look at the content of the volume.
+
+```.term1
+ls /graph/volumes/html/_data
+```
+
+The content of the **/usr/share/nginx/html** folder of the **www** container has been copied into the **/graph/volumes/html/_data** folder on the host.
+
+Let's have a look at the nginx's [welcome page](#){:data-term=".term1"}{:data-port="8080"}
+
+From our host, we can now modify the index.html file and verify the changes are taken into account within the container.
+
+```.term1
+cat<<END >/graph/volumes/html/_data/index.html
+SOMEONE HERE ?
+END
+```
+
+Let's have a look at the nginx's [welcome page](#){:data-term=".term1"}{:data-port="8080"}. We can see the changes we have done in the index.html.
+
+Note: please reload the page if you cannot see the changes.
+
+## Mount host's folder into a container
+
+The last item we will talk about is named bind-mount and consist of mouting a host's folder into a container's folder. This is done using the **-v** option of the **docker container run** command. Instead of specifying one single path (as we did when defining volumes) we will specified 2 paths separated by a column.
+
+```
+docker container run -v HOST_PATH:CONTAINER_PATH [OPTIONS] IMAGE [CMD]
+```
+
+Note: HOST_PATH and CONTAINER_PATH can be a folder or file. HOST_PATH must exist before running this command.
+
+Several cases to consider:
+- the CONTAINER_PATH does not exist within the container
+- the CONTAINER_PATH exists within the container
+
+### 1st case
+
+Let's run an alpine container bind mounting the local /tmp folder inside the container /data folder.
+
+```.term1
+docker container run -ti -v /tmp:/data alpine sh
+```
+
+We end up in a shell inside our container. By default, there is no /data folder in an alpine distribution. What is the impact of the bind-mount ?
+
+```.term1
+ls /data
+```
+
+The /data folder has been created inside the container and it contains the content of the /tmp folder of the host. We can now, from the container, change files on the host and the other way round.
+
+### 2nd case
+
+Let's run a nginx container bind mouting the local /tmp folder inside the /usr/share/nginx/html folder of the container.
+
+```.term1
+docker container run -ti -v /tmp:/usr/share/nginx/html nginx bash
+```
+
+Are the default index.html and 50x.html files still there in the container's /usr/share/nginx/html folder ?
+
+```.term1
+ls /usr/share/nginx/html
+```
+
+No ! The content of the container's folder has been overridden with the content of the host folder.
+
+Bind-mouting is very usefull in development as it enables, for instance, to share source code on the host with the container.
