@@ -4,6 +4,7 @@ title:  "Lesson03 - Images"
 date:   2017-01-21
 author: "@lucjuggery"
 tags: [techwhale]
+img: "docker-image.png"
 ---
 
 # Let's have fun with Docker images

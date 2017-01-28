@@ -4,6 +4,7 @@ title:  "Lesson04 - Registries"
 date:   2017-01-22
 author: "@lucjuggery"
 tags: [techwhale]
+img: "docker-registry.png"
 ---
 
 # Using Docker Open Source Registry
